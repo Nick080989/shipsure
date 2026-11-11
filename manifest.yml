@@ -1,0 +1,183 @@
+modules:
+  jira:projectPage:
+    - key: shipsure-project-page
+      resource: main
+      resolver:
+        function: resolver
+      render: native
+      title: ShipSure
+  rovo:agent:
+    - key: shipsure-agent
+      name: ShipSure Release Captain
+      description: Tells you whether a Jira release is ready to ship, what is blocking
+        it, and drafts release notes.
+      prompt: |
+        You are ShipSure Release Captain, a release manager assistant for software teams using Jira.
+        Your job is to give teams the context to ship with confidence.
+
+        Releases are Jira versions (fix versions) inside a project. When the user does not name a project, use the
+        project from the current context; if there is none, ask for the project key. When the user does not name a
+        version, the tools pick the nearest unreleased version automatically, so just call them.
+
+        Use the tools instead of guessing:
+        - get-release-readiness: readiness score (0-100), verdict, counts, top risks and next steps.
+        - list-release-blockers: ranked risks (blocked issues, high-priority bugs, stalled work, unassigned work).
+        - list-release-issues: every issue in the release with status, priority and assignee.
+        - draft-release-notes: grouped release notes from completed issues.
+        - list-project-versions: the releases that exist in a project.
+        - post-readiness-report: posts the readiness report as a comment on an issue (only when the user asks).
+
+        Answer in this order: the verdict and score in one sentence, then the 3 most important risks with issue keys,
+        then concrete next steps. Keep it short. Never invent issue keys, dates or numbers that the tools did not return.
+        When asked for release notes, return the tool's notes and offer to adjust tone or format.
+      conversationStarters:
+        - Are we ready to ship the next release?
+        - What is blocking the release?
+        - Draft release notes for the next release
+      actions:
+        - get-release-readiness
+        - list-release-blockers
+        - list-release-issues
+        - draft-release-notes
+        - list-project-versions
+        - post-readiness-report
+  rovo:mcp:
+    - key: shipsure-mcp
+      name: ShipSure release tools
+      tools:
+        - get-release-readiness
+        - list-release-blockers
+        - list-release-issues
+        - draft-release-notes
+        - list-project-versions
+  action:
+    - key: get-release-readiness
+      name: Get release readiness
+      function: fn-readiness
+      actionVerb: GET
+      description: >
+        Scores how ready a Jira release (fix version) is to ship, from 0 to 100,
+        with a verdict, issue counts, ranked risks and next steps. If no version
+        is given, the nearest unreleased version is used.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: false
+          description: Jira project key, for example SHIP. Defaults to the current project.
+        version:
+          title: Version
+          type: string
+          required: false
+          description: Release (fix version) name, for example 2.4.0. Defaults to the
+            nearest unreleased version.
+    - key: list-release-blockers
+      name: List release blockers
+      function: fn-blockers
+      actionVerb: GET
+      description: >
+        Lists the risks for a Jira release, most severe first: issues blocked by
+        unfinished work, open high-priority bugs, issues stalled in progress,
+        and unassigned work.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: false
+          description: Jira project key. Defaults to the current project.
+        version:
+          title: Version
+          type: string
+          required: false
+          description: Release name. Defaults to the nearest unreleased version.
+    - key: list-release-issues
+      name: List release issues
+      function: fn-issues
+      actionVerb: GET
+      description: Lists every issue in a Jira release with type, priority, status and
+        assignee.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: false
+          description: Jira project key. Defaults to the current project.
+        version:
+          title: Version
+          type: string
+          required: false
+          description: Release name. Defaults to the nearest unreleased version.
+    - key: draft-release-notes
+      name: Draft release notes
+      function: fn-notes
+      actionVerb: GET
+      description: Drafts release notes for a Jira release from its completed issues,
+        grouped into features, fixes and improvements.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: false
+          description: Jira project key. Defaults to the current project.
+        version:
+          title: Version
+          type: string
+          required: false
+          description: Release name. Defaults to the nearest unreleased version.
+    - key: list-project-versions
+      name: List project releases
+      function: fn-versions
+      actionVerb: GET
+      description: Lists the releases (versions) of a Jira project with release dates
+        and status.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: false
+          description: Jira project key. Defaults to the current project.
+    - key: post-readiness-report
+      name: Post readiness report
+      function: fn-post
+      actionVerb: CREATE
+      description: Posts the release readiness report as a comment on a Jira issue,
+        such as the release ticket.
+      inputs:
+        issueKey:
+          title: Issue key
+          type: string
+          required: true
+          description: The issue to comment on, for example SHIP-42.
+        version:
+          title: Version
+          type: string
+          required: false
+          description: Release name. Defaults to the nearest unreleased version.
+  function:
+    - key: resolver
+      handler: index.handler
+    - key: fn-readiness
+      handler: actions.getReadiness
+    - key: fn-blockers
+      handler: actions.getBlockers
+    - key: fn-issues
+      handler: actions.getReleaseIssues
+    - key: fn-notes
+      handler: actions.getReleaseNotes
+    - key: fn-versions
+      handler: actions.getVersions
+    - key: fn-post
+      handler: actions.postReadiness
+resources:
+  - key: main
+    path: src/frontend/index.jsx
+permissions:
+  scopes:
+    - read:jira-work
+    - write:jira-work
+app:
+  runtime:
+    name: nodejs24.x
+    memoryMB: 256
+    architecture: arm64
+  id: ari:cloud:ecosystem::app/3e602199-9021-48d7-91ea-cdaa1f4b6059
